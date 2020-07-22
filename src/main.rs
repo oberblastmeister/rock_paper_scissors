@@ -7,9 +7,10 @@ use std::convert::TryFrom;
 
 use text_io::read;
 
-
 use rand::{thread_rng, Rng};
 use rand::rngs::ThreadRng;
+
+use colored::Colorize;
 
 use settings::*;
 
@@ -84,7 +85,7 @@ fn rock_paper_scissors() -> io::Result<()> {
     sleep(SLEEP_TIME);
     println!("Scissors");
     sleep(SLEEP_TIME);
-    print!("Shoot!: ");
+    print!("Shoot: ");
     stdout().flush()?;
 
     Ok(())
@@ -146,7 +147,8 @@ fn rock_paper_scissors_input() -> io::Result<Play> {
 
 fn main() -> io::Result<()> {
     clear_screen();
-    println!("{}", RULES);
+    println!("{}\n", RULES);
+    sleep(SLEEP_TIME * 2);
     print!("Do you want to play against a friend or a bot? (pick 1 or 2) ");
     stdout().flush()?;
     let choice = choose_number_input()?;
