@@ -1,77 +1,19 @@
 mod settings;
+mod play;
 
-use std::io::{Write, self, stdout};
-use std::cmp::{PartialOrd, Ordering};
+use std::io::{Write, self, stdout, stdin};
 use std::thread::sleep;
 use std::convert::TryFrom;
 
 use text_io::read;
 
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 use rand::rngs::ThreadRng;
 
 use colored::Colorize;
 
 use settings::*;
-
-#[derive(Debug, PartialEq)]
-enum Play {
-    Rock, Paper, Scissors
-}
-
-impl Play {
-    fn new_random(thread_rng: &mut ThreadRng) -> Self {
-        use Play::*;
-
-        match thread_rng.gen_range(0, 3) {
-            0 => Rock,
-            1 => Paper,
-            2 => Scissors,
-            _ => panic!("BUG: panic used to bypass error: [rustc E0004] [E] non-exhaustive patterns: `std::i32::MIN..=-1i32` and `3i32.. 
-        =std::i32::MAX` not covered                     ensure that all possible cases are being handled, possibly by adding wildcards   or more match arms")
-        }
-    }
-}
-
-impl TryFrom<&String> for Play {
-    type Error = &'static str;
-
-    fn try_from(s: &String) -> Result<Self, Self::Error> {
-
-        use Play::*;
-
-        match s.to_lowercase().trim() {
-            "rock" => Ok(Rock),
-            "paper" => Ok(Paper),
-            "scissors" => Ok(Scissors),
-            _ => Err("Could not convert the string to a Play")
-        }
-    }
-}
-
-impl PartialOrd for Play {
-    fn partial_cmp(&self, other: &Play) -> Option<Ordering> {
-        use Play::*;
-
-        match self {
-            Rock => match other {
-                Rock => Some(Ordering::Equal),
-                Paper => Some(Ordering::Less),
-                Scissors => Some(Ordering::Greater),
-            },
-            Paper => match other {
-                Rock => Some(Ordering::Greater),
-                Paper => Some(Ordering::Equal),
-                Scissors => Some(Ordering::Less),
-            },
-            Scissors => match other {
-                Rock => Some(Ordering::Less),
-                Paper => Some(Ordering::Greater),
-                Scissors => Some(Ordering::Equal),
-            }
-        }
-    }
-}
+use play::Play;
 
 fn clear_screen() {
     print!("{}[2J", 27 as char);
@@ -97,8 +39,18 @@ fn choose_number_input() -> io::Result<u8> {
     loop {
         match choice.parse::<u8>() {
             Ok(i) => {
-                parsed_choice = i;
-                break
+                match i {
+                    1 | 2 => {
+                        parsed_choice = i;
+                        break
+                    }
+                    _ => {
+                        println!("You choice must be 1 or 2.");
+                        print!("Please retype: ");
+                        stdout().flush()?;
+                        choice = read!();
+                    }
+                }
             },
             Err(e) => {
                 println!("{:?}", e);
@@ -145,76 +97,111 @@ fn rock_paper_scissors_input() -> io::Result<Play> {
     Ok(play)
 }
 
+fn confirm(msg: &str) -> io::Result<()> {
+    print!("{}", msg);
+    stdout().flush()?;
+    let mut _s = String::new();
+    stdin().read_line(&mut _s)?;
+
+    clear_screen();
+
+    sleep(SLEEP_TIME);
+
+    Ok(())
+}
+
+fn play_bot(thread_rng: &mut ThreadRng) -> io::Result<()> {
+    loop {
+        rock_paper_scissors()?;
+        let play = rock_paper_scissors_input()?;
+
+        // let bot play
+        println!("The bot is playing...");
+        let bot_play = Play::new_random(thread_rng);
+
+        sleep(SLEEP_TIME);
+
+        println!("The bot played {:?}", bot_play);
+
+        sleep(SLEEP_TIME);
+
+        if play > bot_play {
+            println!("{}", WINNING_MSG);
+        } else if play == bot_play {
+            println!("{}", TYING_MSG);
+        } else {
+            println!("{}", LOSING_MSG);
+        }
+
+        print!("Do you want to play again? [y/n]");
+        stdout().flush()?;
+        let again: String = read!();
+        if again == "n" {
+            break
+        }
+
+        clear_screen();
+    }
+
+    Ok(())
+}
+
+fn play_friend() -> io::Result<()> {
+    loop {
+        let mut plays = Vec::with_capacity(PLAYER_NUMBERS as usize);
+        for i in 1..=PLAYER_NUMBERS {
+            let message = format!("Is player {} ready? (press enter to continue) ", i);
+            confirm(&message)?;
+            rock_paper_scissors()?;
+            let play = rock_paper_scissors_input()?;
+            plays.push(play);
+            clear_screen();
+        }
+
+        confirm("Are you ready to see the results? (press enter to continue) ")?;
+
+        for i  in 1..=PLAYER_NUMBERS {
+            println!("Player {} played {:?}", i, plays[i as usize - 1]);
+        }
+
+        if plays[0] > plays[1] {
+            println!("Player 1 has won!");
+        } else if plays[0] == plays[1] {
+            println!("Player 1 and Player 2 tied!");
+        } else {
+            println!("Player 2 has won!");
+        }
+
+        print!("Do you want to play again? [y/n] ");
+        stdout().flush()?;
+        if !play_again_input() {
+            break
+        }
+    }
+
+    Ok(())
+}
+
+fn prelude() -> io::Result<u8> {
+    println!("{}\n", RULES);
+    sleep(SLEEP_TIME);
+    print!("Do you want to play against a bot or a friend? (pick 1 or 2) ");
+    stdout().flush()?;
+
+    Ok(choose_number_input()?)
+}
+
 fn main() -> io::Result<()> {
     clear_screen();
-    println!("{}\n", RULES);
-    sleep(SLEEP_TIME * 2);
-    print!("Do you want to play against a friend or a bot? (pick 1 or 2) ");
-    stdout().flush()?;
-    let choice = choose_number_input()?;
+    let choice = prelude()?;
+    clear_screen();
 
     let mut thread_rng = thread_rng();
 
-    // game loop
     if choice == 1 {
-        loop {
-            rock_paper_scissors()?;
-            let play = rock_paper_scissors_input()?;
-
-            // let bot play
-            println!("The bot is playing...");
-            let bot_play = Play::new_random(&mut thread_rng);
-
-            sleep(SLEEP_TIME);
-
-            println!("The bot played {:?}", bot_play);
-
-            sleep(SLEEP_TIME);
-
-            if play > bot_play {
-                println!("{}", WINNING_MSG);
-            } else if play == bot_play {
-                println!("{}", TYING_MSG);
-            } else {
-                println!("{}", LOSING_MSG);
-            }
-
-            print!("Do you want to play again? [y/n]");
-            stdout().flush()?;
-            let again: String = read!();
-            if again == "n" {
-                break
-            }
-
-            clear_screen();
-        }
+        play_bot(&mut thread_rng)?;
     } else {
-        loop {
-            rock_paper_scissors()?;
-            let play = rock_paper_scissors_input()?;
-
-
-            println!("The bot is playing...");
-            let bot_play = Play::new_random(&mut thread_rng);
-
-            sleep(SLEEP_TIME);
-
-            println!("The bot played {:?}", bot_play);
-
-            sleep(SLEEP_TIME);
-
-            if play > bot_play {
-                println!("{}", WINNING_MSG);
-            } else {
-                println!("{}", LOSING_MSG);
-            }
-
-            print!("Do you want to play again? [y/n] ");
-            stdout().flush()?;
-            if !play_again_input() {
-                break
-            }
-        }
+        play_friend()?;
     }
 
     Ok(())
